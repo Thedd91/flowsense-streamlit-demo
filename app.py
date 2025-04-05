@@ -1,4 +1,3 @@
-
 import streamlit as st
 import openai
 import re
@@ -6,7 +5,6 @@ from graphviz import Digraph
 
 st.set_page_config(page_title="AI Meeting Process Visualizer", layout="wide")
 
-# --- API Key Input ---
 st.title("🧠 FlowSense AI – Demo MVP")
 api_key = st.text_input("Enter your OpenAI API Key:", type="password")
 
@@ -29,39 +27,46 @@ if api_key:
                 {"role": "user", "content": transcript}
             ]
 
-            response = openai.ChatCompletion.create(
-                model="gpt-4-turbo",
-                messages=messages,
-                temperature=0.3
-            )
+            try:
+                response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=messages,
+                    temperature=0.3
+                )
+                content = response.choices[0].message.content
 
-            content = response.choices[0].message.content
+                as_is = re.findall(r"as_is:(.*?)to_be:", content, re.DOTALL)
+                to_be = re.findall(r"to_be:(.*?)pain_points:", content, re.DOTALL)
+                pain_points = re.findall(r"pain_points:(.*)", content, re.DOTALL)
 
-            as_is = re.findall(r"as_is:(.*?)to_be:", content, re.DOTALL)
-            to_be = re.findall(r"to_be:(.*?)pain_points:", content, re.DOTALL)
-            pain_points = re.findall(r"pain_points:(.*)", content, re.DOTALL)
+                as_is_steps = as_is[0].strip().split("->") if as_is else []
+                to_be_steps = to_be[0].strip().split("->") if to_be else []
+                pain_list = pain_points[0].strip().split("\n") if pain_points else []
 
-            as_is_steps = as_is[0].strip().split("->") if as_is else []
-            to_be_steps = to_be[0].strip().split("->") if to_be else []
-            pain_list = pain_points[0].strip().split("\n") if pain_points else []
+                st.markdown("### 🔁 As-Is Process")
+                dot_as_is = Digraph()
+                for i, step in enumerate(as_is_steps):
+                    dot_as_is.node(f"a{i}", step.strip())
+                    if i > 0:
+                        dot_as_is.edge(f"a{i-1}", f"a{i}")
+                st.graphviz_chart(dot_as_is)
 
-            st.markdown("### 🔁 As-Is Process")
-            dot_as_is = Digraph()
-            for i, step in enumerate(as_is_steps):
-                dot_as_is.node(f"a{i}", step.strip())
-                if i > 0:
-                    dot_as_is.edge(f"a{i-1}", f"a{i}")
-            st.graphviz_chart(dot_as_is)
+                st.markdown("### 🚀 To-Be Process")
+                dot_to_be = Digraph()
+                for i, step in enumerate(to_be_steps):
+                    dot_to_be.node(f"b{i}", step.strip())
+                    if i > 0:
+                        dot_to_be.edge(f"b{i-1}", f"b{i}")
+                st.graphviz_chart(dot_to_be)
 
-            st.markdown("### 🚀 To-Be Process")
-            dot_to_be = Digraph()
-            for i, step in enumerate(to_be_steps):
-                dot_to_be.node(f"b{i}", step.strip())
-                if i > 0:
-                    dot_to_be.edge(f"b{i-1}", f"b{i}")
-            st.graphviz_chart(dot_to_be)
+                st.markdown("### ⚠️ Pain Points & Insights")
+                for p in pain_list:
+                    if p.strip():
+                        st.markdown(f"- {p.strip()}")
 
-            st.markdown("### ⚠️ Pain Points & Insights")
-            for p in pain_list:
-                if p.strip():
-                    st.markdown(f"- {p.strip()}")
+            except openai.error.RateLimitError:
+                st.error("⚠️ Rate limit exceeded. Try again later or use a different API key.")
+            except openai.error.AuthenticationError:
+                st.error("⚠️ Invalid API key. Please check and try again.")
+            except Exception as e:
+                st.error(f"❌ Unexpected error: {e}")
